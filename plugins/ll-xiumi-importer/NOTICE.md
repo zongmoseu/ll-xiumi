@@ -1,0 +1,2 @@
+导入和核验核心page-runtime.js复用Infunus/OpsLion（基线6bcb01e4e3bfe715052bde243721aec305708094）的Xiumi Bridge，保留上游CC0许可，见UPSTREAM-LICENSE。
+独立插件界面由本项目定制，不依赖OpsLion工作台、本地服务或Node.js。图标为本项目的ll文字标识。

@@ -1,0 +1,17 @@
+{
+  "brand-default": {
+    "name": "品牌基础分区版",
+    "primary": "#355b70",
+    "light": "#f2f6f8",
+    "accent": "#90aab7",
+    "text": "#3e3e3e",
+    "font_size": 14,
+    "line_height": 1.6,
+    "letter_spacing": 1,
+    "heading": "bar",
+    "page_background": "#ffffff",
+    "group_border": "#dde6ea",
+    "group_padding": 22,
+    "summary_padding": 26
+  }
+}

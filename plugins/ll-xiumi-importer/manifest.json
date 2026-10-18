@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "ll帮你喂给xiumi",
+  "version": "0.6.0",
+  "description": "导入AI排版生成的.xiumi.json，自动处理配图并写入秀米正文。无需工作台。",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "https://xiumi.us/*",
+    "https://*.xiumi.us/*"
+  ],
+  "action": {
+    "default_title": "ll帮你喂给xiumi",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "short_name": "ll"
+}

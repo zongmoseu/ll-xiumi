@@ -1,0 +1,4 @@
+interface:
+  display_name: "品牌公众号排版"
+  short_description: "首次收集账号素材并保存品牌配置，将图文稿排成可由插件导入秀米的成稿"
+  default_prompt: "请使用 $wechat-brand-layout 为我的公众号排版这份图文稿；首次使用先收集常用品牌素材，交付秀米导入JSON和预览。"
