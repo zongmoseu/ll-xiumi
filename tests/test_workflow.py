@@ -60,6 +60,67 @@ class LayoutWorkflows(unittest.TestCase):
         self.assertNotIn('吴', packet['html'])
         self.assertEqual(brand.list_profiles(self.root / 'data')[0]['status'], 'ready')
 
+    def test_standard_layout_wraps_text_and_groups_photos_without_brand_footer(self):
+        from bs4 import BeautifulSoup
+        profile = self.profile()
+        brand.mark_ready(profile, 'neutral')
+        a = deepcopy(self.article)
+        a['blocks'][1:] = a['blocks'][1]['blocks'] + [
+            {'type': 'image', 'src': str(self.image(f'photo-{i}.png', color))}
+            for i, color in enumerate(['red', 'green', 'blue', 'yellow'])]
+        brand.write_json(self.input, a)
+        result = brand.render_article(self.input, profile, self.root / 'standard')
+        doc = BeautifulSoup((self.root / 'standard/article.html').read_text(encoding='utf-8'), 'html.parser')
+        self.assertIn('background:#f5fbff', doc.section['style'])
+        group = doc.select_one('[data-layout-group="section"]')
+        self.assertIn('padding:22px', group['style'])
+        self.assertIn('border:1px solid #6ca1c3', group['style'])
+        self.assertEqual([len(row.select('img')) for row in group.select('[data-image-layout="row"]')], [2, 2])
+        self.assertEqual(len(doc.select('img')), 4)  # No implicit institutional footer.
+        self.assertTrue(result['text_preserved'])
+        self.assertIn('background:#2c709f;color:#ffffff', str(doc))
+        self.assertEqual(doc.get_text().count('END'), 1)
+
+    def test_legacy_default_migrates_but_custom_theme_and_assets_are_preserved(self):
+        profile = self.profile()
+        original = brand.read_json(profile)
+        original['theme'] = deepcopy(brand.LEGACY_THEME)
+        brand.write_json(profile, original)
+        brand.mark_ready(profile, 'neutral')
+        a = deepcopy(self.article)
+        a['style_overrides'] = deepcopy(brand.LEGACY_THEME)
+        brand.write_json(self.input, a)
+        result = brand.render_article(self.input, profile, self.root / 'migrated')
+        self.assertEqual(len(result['layout_migrations']), 2)
+        updated = brand.read_json(profile)
+        self.assertEqual(updated['theme'], brand.DEFAULT_THEME)
+        self.assertEqual(updated['assets'], original['assets'])
+        updated['theme'] = {**brand.LEGACY_THEME, 'primary': '#123456'}
+        brand.write_json(profile, updated)
+        brand.write_json(self.input, self.article)
+        result = brand.render_article(self.input, profile, self.root / 'custom')
+        self.assertEqual(result['layout_migrations'], [])
+        self.assertIn('#123456', (self.root / 'custom/article.html').read_text(encoding='utf-8'))
+
+    def test_summary_heading_added_and_explicit_stacked_gallery_respected(self):
+        profile = self.profile()
+        brand.mark_ready(profile, 'neutral')
+        a = deepcopy(self.article)
+        a['blocks'][1]['variant'] = 'summary'
+        # A caller-supplied section heading is retained; do not generate a second heading.
+        a['blocks'].append({'type': 'gallery', 'mode': 'stack', 'images': [
+            {'src': str(self.image('first.png', 'red'))}, {'src': str(self.image('second.png', 'blue'))}]})
+        brand.write_json(self.input, a)
+        brand.render_article(self.input, profile, self.root / 'stack')
+        html = (self.root / 'stack/article.html').read_text(encoding='utf-8')
+        self.assertNotIn('data-image-layout="row"', html)
+        a['blocks'] = a['blocks'][1:]
+        a['source_text'] = a['source_text'].replace('现场交流\n', '')
+        brand.write_json(self.input, a)
+        brand.render_article(self.input, profile, self.root / 'summary')
+        output = brand.read_json(self.root / 'summary/article.json')
+        self.assertIn('结语', output['layout_additions'])
+
     def test_assets_persist_roles_are_respected_and_rerender_is_idempotent(self):
         profile = self.profile()
         for name, color, role in [('top.bin', 'red', 'header'), ('bottom.png', 'blue', 'footer'),

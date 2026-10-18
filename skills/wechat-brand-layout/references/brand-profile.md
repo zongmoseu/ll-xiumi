@@ -33,7 +33,7 @@ python scripts/brand_layout.py assign --profile /path/to/profile.json --asset a-
 
 AI可直接编辑profile.json的theme及notes，不让用户填JSON。包含基础色primary/light/accent/text，字号font_size、行高line_height、字距letter_spacing，标题heading（bar / section-label / number），页底page_background，组框group_border（null表示不用框）、group_padding、summary_padding。默认基础样式不包含任何具体机构元素。
 
-从参考推送归纳色彩、标题、边距与组件用法，形成profile.theme和notes。当前明确要求覆盖profile，长期偏好再保存；单篇试验用article.style_overrides。保持brand_id，不能将一个品牌的稿件拿另一个profile悄悄渲染。
+默认保留浅蓝分区标准规范。参考推送用于理解内容分组与素材用法；只有用户明确要求改变视觉风格时才调整profile.theme，并记录到notes。当前明确要求覆盖profile，长期偏好再保存；单篇试验用article.style_overrides。保持brand_id，不能将一个品牌的稿件拿另一个profile悄悄渲染。
 
 ```sh
 python scripts/brand_layout.py ready --profile /path/to/profile.json --mode configured
@@ -46,3 +46,7 @@ init只创建pending配置。ready表示首次征集已得到回应、素材用�
 ## 更换和复用
 
 重新import-assets按内容去重；编辑角色/主题不影响其他profile。新增公众号创建新id。存储不在公共skill目录内，git发布只包含代码、文档、无品牌模板；不提交用户实际profile、图片、参考文稿。迁移机器时需迁移整个profile目录，仅skill安装文件不含个人品牌材料。
+
+## v0.2默认样式升级
+
+v0.1未定制的完整默认主题（白页底、条形标题）会在渲染时迁移到当前浅蓝分区标准版；已有自定义主题不自动重置。历史输出中的同一默认主题快照也会清除，避免盖过当前profile。用户明确要求恢复标准时使用assets/themes.json中的brand-default，保留素材与账号信息。

@@ -1,16 +1,16 @@
 {
   "brand-default": {
-    "name": "品牌基础分区版",
-    "primary": "#355b70",
-    "light": "#f2f6f8",
-    "accent": "#90aab7",
+    "name": "浅蓝分区标准版",
+    "primary": "#2c709f",
+    "light": "#edf7fd",
+    "accent": "#8bb9d1",
     "text": "#3e3e3e",
     "font_size": 14,
     "line_height": 1.6,
     "letter_spacing": 1,
-    "heading": "bar",
-    "page_background": "#ffffff",
-    "group_border": "#dde6ea",
+    "heading": "section-label",
+    "page_background": "#f5fbff",
+    "group_border": "#6ca1c3",
     "group_padding": 22,
     "summary_padding": 26
   }

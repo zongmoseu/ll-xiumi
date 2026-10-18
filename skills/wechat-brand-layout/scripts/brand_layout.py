@@ -14,6 +14,7 @@ from PIL import Image, UnidentifiedImageError
 import layout_engine as engine
 
 DEFAULT_THEME = deepcopy(engine.THEMES['brand-default'])
+LEGACY_THEME = json.loads((engine.SKILL_DIR / 'assets/legacy-basic-theme.json').read_text(encoding='utf-8'))
 ROLES = ('cover', 'logo', 'header', 'footer', 'divider', 'qr', 'other', 'reference')
 BODY_ROLES = {'logo', 'header', 'footer', 'divider', 'qr'}
 MAX_FILES = 500
@@ -222,6 +223,98 @@ def validate_theme(theme):
             raise ValueError('组内留白须为0–48px：' + key)
 
 
+def is_legacy_default(theme):
+    """Only migrate an exact old default, never a user's partial/custom theme."""
+    return {k: v for k, v in theme.items() if k != 'name'} == {
+        k: v for k, v in LEGACY_THEME.items() if k != 'name'}
+
+
+def normalize_layout(article):
+    """Apply the standard composition to semantic blocks without rewriting text."""
+    additions = article.setdefault('layout_additions', [])
+    adjustments = []
+
+    def pictures(blocks):
+        output = []
+        index = 0
+        while index < len(blocks):
+            block = blocks[index]
+            if block['type'] == 'group':
+                block['blocks'] = pictures(block['blocks'])
+            if block['type'] == 'gallery':
+                block.setdefault('mode', 'row' if len(block['images']) in (2, 3) else 'stack')
+                block.setdefault('width_percent', 90)
+                if block['mode'] == 'row':
+                    block.setdefault('gap_px', 8)
+            if block['type'] == 'image':
+                end = index + 1
+                while end < len(blocks) and blocks[end]['type'] == 'image':
+                    end += 1
+                consecutive = blocks[index:end]
+                if len(consecutive) > 1:
+                    # Semantic separation must be represented by groups/captions, not invisible guesses.
+                    while len(consecutive) > 1:
+                        size = 2 if len(consecutive) in (2, 4) else 3
+                        output.append({'type': 'gallery', 'mode': 'row', 'gap_px': 8,
+                                       'width_percent': 90, 'images': consecutive[:size]})
+                        consecutive = consecutive[size:]
+                    if consecutive:
+                        output.extend(pictures(consecutive))
+                    adjustments.append('连续照片整理为独立图片的左右留缝图组')
+                    index = end
+                    continue
+                if 'width_percent' not in block:
+                    image_path = Path(block['src'])
+                    if image_path.is_file():
+                        with Image.open(image_path) as image:
+                            block['width_percent'] = 72 if image.height > image.width else 90
+            output.append(block)
+            index += 1
+        return output
+
+    blocks = pictures(article['blocks'])
+    result, pending = [], []
+    variant = 'intro'
+
+    def flush():
+        nonlocal pending
+        if pending:
+            result.append({'type': 'group', 'variant': variant, 'blocks': pending})
+            pending = []
+            adjustments.append('散列正文整理为带框内容分区')
+
+    boundaries = {'heading', 'section_label', 'group', 'credit', 'end_mark', 'component'}
+    for block in blocks:
+        typ = block['type']
+        if typ in boundaries:
+            flush()
+            if typ in ('heading', 'section_label'):
+                title = block.get('label', engine.runs_text(block.get('runs', []))).strip()
+                variant = 'summary' if title in ('结语', '结尾', '总结', '尾声') else 'section'
+            elif typ == 'group':
+                if block.get('variant') == 'summary' and (not result or result[-1]['type'] not in ('heading', 'section_label')):
+                    result.append({'type': 'section_label', 'label': '结语'})
+                    if '结语' not in additions:
+                        additions.append('结语')
+                variant = 'section'
+            result.append(block)
+        elif typ == 'intro':
+            flush()
+            # Use one framed intro instead of nesting a second padded intro box.
+            result.append({'type': 'group', 'variant': 'intro', 'blocks': [
+                {'type': 'paragraph', 'runs': block.get('runs', []), 'indent': False}]})
+            variant = 'section'
+        else:
+            pending.append(block)
+    flush()
+    if not any(block['type'] == 'end_mark' for block in result):
+        position = next((i for i, block in enumerate(result) if block['type'] == 'credit'), len(result))
+        result.insert(position, {'type': 'end_mark'})
+    article['blocks'] = result
+    article['layout_adjustments'] = adjustments
+    article['layout_version'] = 2
+
+
 def render_article(article_path, profile_path, output):
     profile_path, profile = load_profile(profile_path)
     if profile.get('onboarding', {}).get('status') != 'ready':
@@ -232,6 +325,15 @@ def render_article(article_path, profile_path, output):
         raise ValueError('稿件属于其他账号，请先按用户要求核对品牌和组件，不能自动串用素材')
     if not article.get('classification_reviewed'):
         raise ValueError('请先阅读稿件、核对栏目和图文结构，再设置classification_reviewed:true')
+    migrated = []
+    if is_legacy_default(profile.get('theme', {})):
+        profile['theme'] = deepcopy(DEFAULT_THEME)
+        profile['layout_version'] = 2
+        write_json(profile_path, profile)
+        migrated.append('旧版未定制的默认主题已升级为浅蓝分区标准版')
+    if is_legacy_default(article.get('style_overrides', {})):
+        article['style_overrides'] = {}
+        migrated.append('清除旧输出携带的默认主题快照，使用当前账号主题')
     theme = {**DEFAULT_THEME, **profile.get('theme', {}), **article.get('style_overrides', {})}
     validate_theme(theme)
     components = {}
@@ -271,6 +373,7 @@ def render_article(article_path, profile_path, output):
         (headers if asset['role'] == 'header' else footers).append(item)
     if len(headers) > 1 or len(footers) > 1:
         raise ValueError('同一角色存在多个自动组件，请先确定本次使用哪一个')
+    normalize_layout(article)
     article['blocks'] = headers + article['blocks'] + footers
     article['brand_id'] = profile['id']
     article['theme'] = 'brand-default'
@@ -283,6 +386,9 @@ def render_article(article_path, profile_path, output):
     write_json(prepared, article)
     checks = engine.render(prepared, output)
     checks['brand_id'] = profile['id']
+    checks['layout_version'] = 2
+    checks['layout_adjustments'] = article['layout_adjustments']
+    checks['layout_migrations'] = migrated
     write_json(output / 'checks.json', checks)
     return checks
 
