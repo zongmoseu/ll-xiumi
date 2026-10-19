@@ -53,3 +53,7 @@ python scripts/brand_layout.py render work/article.json --profile /path/to/profi
 给用户可点击的实际JSON和预览文件链接。沿用[独立秀米插件](https://github.com/zongmoseu/ll-xiumi/tree/main/plugins/ll-xiumi-importer)，界面名称为“ll帮你喂给xiumi”，支持本skill的任意品牌包，无需安装另一个插件。用户在秀米空白图文中选择JSON后导入、核对并保存。
 
 脚本依赖见requirements.txt。profile是本地持久数据，升级skill不覆盖素材。v0.1的未定制默认主题及输出携带的旧默认主题快照会自动迁移到标准版；用户自定义主题保留。用户明确要求恢复标准版时，把profile.theme恢复为assets/themes.json中的brand-default，并移除稿件里不再需要的style_overrides，勿用旧输出的整套样式覆盖新规范。
+
+## 结尾署名分隔格式
+
+署名统一为“角色 | 姓名”，使用半角竖线，左右各且仅一个普通空格，例如“摄影 | 张三 李四”“撰稿 | 王五”“审核 | 赵六”。保留角色、人名、顺序和姓名之间原有分隔，不补署名。已有冒号、全角竖线或不一致空格由渲染器规范化；此规则只处理署名角色与姓名之间的分隔，不改正文、标题或表格中的标点。保持12px灰色、透明背景。原始结构稿与source_text保留原貌，checks.credit_format_changes记录显示层调整。

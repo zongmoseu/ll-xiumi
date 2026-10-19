@@ -60,6 +60,31 @@ class LayoutWorkflows(unittest.TestCase):
         self.assertNotIn('吴', packet['html'])
         self.assertEqual(brand.list_profiles(self.root / 'data')[0]['status'], 'ready')
 
+    def test_credit_separator_is_formatted_without_changing_source_or_names(self):
+        from bs4 import BeautifulSoup
+        profile = self.profile()
+        brand.mark_ready(profile, 'neutral')
+        article = deepcopy(self.article)
+        credits = ['摄影：张三 李四', '撰稿｜  王五', '审核  |\t赵六', '美编 | 孙七']
+        for line in credits:
+            article['blocks'].append({'type': 'credit', 'runs': [
+                {'text': line[:2]}, {'text': line[2:3]}, {'text': line[3:], 'bold': True}]})
+        article['source_text'] += '\n' + '\n'.join(credits)
+        brand.write_json(self.input, article)
+        result = brand.render_article(self.input, profile, self.root / 'credits')
+        self.assertFalse(result['source_text_changed_with_authorization'])
+        portable = brand.read_json(self.root / 'credits/article.json')
+        self.assertEqual(portable['source_text'], article['source_text'])
+        doc = BeautifulSoup((self.root / 'credits/article.html').read_text(encoding='utf-8'), 'html.parser')
+        visible = [p.get_text() for p in doc.select('p')]
+        for line in ['摄影 | 张三 李四', '撰稿 | 王五', '审核 | 赵六', '美编 | 孙七']:
+            self.assertIn(line, visible)
+        self.assertEqual(len(result['credit_format_changes']), 3)
+        self.assertTrue(any('王五' in node.get_text() for node in doc.select('strong')))
+        brand.render_article(self.root / 'credits/article.json', profile, self.root / 'credits-again')
+        self.assertEqual((self.root / 'credits/article.html').read_text(encoding='utf-8'),
+                         (self.root / 'credits-again/article.html').read_text(encoding='utf-8'))
+
     def test_standard_layout_wraps_text_and_groups_photos_without_brand_footer(self):
         from bs4 import BeautifulSoup
         profile = self.profile()

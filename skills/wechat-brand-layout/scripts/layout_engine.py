@@ -17,6 +17,41 @@ COMPONENTS = json.loads((SKILL_DIR/'assets/components.json').read_text(encoding=
 def dump(path, obj):
     Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding='utf-8')
 
+def format_credit_runs(rr):
+    """Normalize only the role/name separator, preserving text-run formatting."""
+    text=runs_text(rr)
+    labels='图文|文字|图片|摄影|撰稿|供稿|文案|编辑|美编|责编|主编|审核|审校|校对|排版|设计|策划|统筹|来源'
+    match=re.match(r'^('+labels+r')[ \t\u3000]*[:：|｜][ \t\u3000]*',text)
+    if not match:return rr
+    def slice_runs(start,end):
+        result=[];offset=0
+        for run in rr:
+            value=run.get('text','');left=max(start-offset,0);right=min(end-offset,len(value))
+            if left<right:result.append({**run,'text':value[left:right]})
+            offset+=len(value)
+        return result
+    return slice_runs(0,len(match[1]))+[{'text':' | '}]+slice_runs(match.end(),len(text))
+
+
+def display_blocks(blocks):
+    """Keep source/portable article untouched; audit only visual credit punctuation."""
+    from copy import deepcopy
+    result=deepcopy(blocks);changes=[]
+    def visit(items):
+        for item in items:
+            if item['type']=='credit':
+                before=runs_text(item.get('runs',[]))
+                item['runs']=format_credit_runs(item.get('runs',[]))
+                after=runs_text(item['runs'])
+                if before!=after:changes.append({'before':before,'after':after})
+            elif item['type']=='group':visit(item['blocks'])
+            elif item['type']=='table':
+                for row in item['rows']:
+                    for cell in row:visit(cell['blocks'])
+    visit(result)
+    return result,changes
+
+
 def compact(text):
     return re.sub(r'\s+', '', text)
 
@@ -81,7 +116,7 @@ def extract_text(path):
         elif is_md:
             match=re.match(r'^(\d+[.)]|[-*+])\s+(.+)',line)
             if match:typ='list_item';marker=match[1];line=match[2]
-        if re.match(r'^(图文|文字|图片|摄影|编辑|责编|审核|审校|排版|来源)\s*[|｜：:]',line):typ='credit'
+        if re.match(r'^(图文|文字|图片|摄影|撰稿|供稿|文案|编辑|美编|责编|主编|审核|审校|校对|排版|设计|策划|统筹|来源)\s*[|｜：:]',line):typ='credit'
         block={'type':typ,'runs':inline_markdown(line) if is_md else [{'text':line}]}
         if marker:block['marker']=marker
         blocks.append(block)
@@ -211,7 +246,7 @@ def extract_docx(path, media_dir):
                 first['type']='list_item';first['marker']=n[0];first['level']=n[1]
         for block in out:
             text=runs_text(block.get('runs',[]))
-            if re.match(r'^(图文|文字|图片|摄影|编辑|责编|审核|审校|排版|来源)\s*[|｜：:]',text):block['type']='credit'
+            if re.match(r'^(图文|文字|图片|摄影|撰稿|供稿|文案|编辑|美编|责编|主编|审核|审校|校对|排版|设计|策划|统筹|来源)\s*[|｜：:]',text):block['type']='credit'
         if name.lower() in ('title','标题') and not any(x['type']=='image' for x in out):
             return out,True
         return out,False
@@ -428,7 +463,8 @@ def render(article_path, output, theme_name=None, image_map=None, include_title=
             indent='0' if b.get('indent',True) is False else '2em'
             return f'<p style="margin:0 0 16px;text-align:justify;text-indent:{indent};overflow-wrap:break-word;">{text}</p>'
         raise ValueError('未知内容模块：'+str(typ))
-    body=''.join(block(b) for b in a['blocks'])
+    visible_blocks,credit_changes=display_blocks(a['blocks'])
+    body=''.join(block(b) for b in visible_blocks)
     heading='<h1 style="font-size:22px;line-height:1.4;margin:0 0 24px;">'+html.escape(a['title'])+'</h1>' if include_title else ''
     fragment=f'<section style="box-sizing:border-box;padding:0 10px;font-size:{theme["font_size"]:g}px;line-height:{theme["line_height"]:g};letter-spacing:{theme["letter_spacing"]:g}px;color:{theme["text"]};">'+heading+body+'</section>'
     if theme.get('page_background'):
@@ -436,7 +472,7 @@ def render(article_path, output, theme_name=None, image_map=None, include_title=
         fragment=fragment.replace('padding:0 10px;',f'padding:16px 10px;background:{theme["page_background"]};',1)
     parsed=BeautifulSoup(fragment,'html.parser')
     for generated in parsed.select('[data-generated]'):generated.decompose()
-    expected=(a['title'] if include_title else '')+blocks_text(a['blocks'])
+    expected=(a['title'] if include_title else '')+blocks_text(visible_blocks)
     if compact(parsed.get_text())!=compact(expected):raise ValueError('渲染后的正文文本与结构稿不同；已停止交付')
     imported=fragment
     for entry in manifest:
@@ -448,6 +484,7 @@ def render(article_path, output, theme_name=None, image_map=None, include_title=
     missing=[m['local'] for m in manifest if not m['wechat_url']]
     if missing:warnings.append('图片仍使用本地路径：交由编辑器接收/上传后才能成为公众号可发布稿。')
     checks={'column':column,'subtype':a.get('subtype'),'theme':theme_name,'classification_reviewed':a.get('classification_reviewed',False),'text_preserved':True,'source_text_changed_with_authorization':source_changed,'image_files':len(manifest),'images_pending_wechat_upload':missing,'legacy_import_verified':False,'warnings':list(dict.fromkeys(warnings))}
+    checks['credit_format_changes']=credit_changes
     checks['layout_additions']=a.get('layout_additions',[])
     def pending_graphics(blocks):
         pending=[]
